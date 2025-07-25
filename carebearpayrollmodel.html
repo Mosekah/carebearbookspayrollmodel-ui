@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>CareBearBooks Payroll Calculator</title>
+  <style>
+    :root {
+      --green: #4CAF50;
+      --light-green: #e6f4ea;
+      --white: #ffffff;
+      --text-dark: #1e4d2b;
+      --font-main: "Segoe UI", "Inter", sans-serif;
+    }
+    body {
+      font-family: var(--font-main);
+      background: var(--light-green);
+      color: var(--text-dark);
+      margin: 0;
+      padding: 20px;
+    }
+    h1 {
+      font-size: 28px;
+      margin-bottom: 10px;
+      color: var(--green);
+    }
+    h2 {
+      font-size: 22px;
+      font-weight: bold;
+      margin-top: 40px;
+      border-bottom: 2px solid var(--green);
+      padding-bottom: 6px;
+    }
+    .section {
+      background: var(--white);
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+      margin-bottom: 30px;
+    }
+    label {
+      display: block;
+      margin-top: 15px;
+      font-weight: bold;
+      font-size: 15px;
+    }
+    input[type="number"], input[type="email"], select {
+      width: 100%;
+      padding: 10px;
+      margin-top: 6px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+    #sCorpFields {
+      margin-top: 15px;
+      padding: 15px;
+      border: 1px dashed var(--green);
+      background-color: #f0fff0;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+
+<h1>CareBearBooks Payroll Calculator</h1>
+
+<div class="section" id="step1">
+  <h2>Step 1: Business Info</h2>
+
+  <label for="businessType">Business Type:</label>
+  <select id="businessType" onchange="toggleSCorpFields()">
+    <option value="">Select...</option>
+    <option value="LLC">LLC</option>
+    <option value="Partnership">Partnership</option>
+    <option value="S-Corp">S-Corp</option>
+  </select>
+
+  <div id="sCorpFields" style="display:none">
+    <label for="w2Salary">W-2 Salary:</label>
+    <input type="number" id="w2Salary" />
+
+    <label for="w2Frequency">W-2 Salary Frequency:</label>
+    <select id="w2Frequency">
+      <option value="Hourly">Hourly</option>
+      <option value="Daily">Daily</option>
+      <option value="Weekly">Weekly</option>
+      <option value="Monthly">Monthly</option>
+    </select>
+  </div>
+
+  <label for="liRate">WA L&I Rate (%):</label>
+  <input type="number" id="liRate" />
+
+  <label for="esdRate">WA ESD Rate (%):</label>
+  <input type="number" id="esdRate" />
+
+  <label for="fedRate">Federal Withholding Rate (%):</label>
+  <input type="number" id="fedRate" />
+
+  <label for="bizZip">Business Zip Code:</label>
+  <input type="number" id="bizZip" />
+
+  <label for="bizEmail">Business Email:</label>
+  <input type="email" id="bizEmail" />
+</div>
+
+<script>
+  function toggleSCorpFields() {
+    const businessType = document.getElementById("businessType").value;
+    document.getElementById("sCorpFields").style.display =
+      businessType === "S-Corp" ? "block" : "none";
+  }
+</script>
+<div class="section" id="step2">
+  <h2>Step 2: Employee Info Table</h2>
+  <p style="color:#c62828; font-weight:bold; margin-bottom:10px;">
+  ⚠️ Click <strong>Add to Payroll</strong> before generating analysis to include all employees and/or to generate analysis!
+</p>
+<table id="employeeTable">
+    <thead>
+      <tr style="background-color:#f0fff0;">
+        <th>Name</th>
+        <th>Add to Payroll</th>
+        <th>Hours/Day</th>
+        <th>Days/Week</th>
+        <th>Hourly Rate</th>
+        <th>Daily Pay</th>
+        <th>Weekly Pay</th>
+        <th>Monthly Pay</th>
+        <th>Annual Pay</th>
+        <th>Weeks/Year</th>
+        <th>Over/Under Table</th>
+      </tr>
+    </thead>
+    <tbody id="employeeBody"></tbody>
+  </table>
+  <button class="add-button" onclick="addEmployee()">+ Add Employee</button>
+</div>
+
+<script>
+  let w2OwnerDetected = false;
+
+  function addEmployee() {
+    const table = document.getElementById("employeeBody");
+    const row = document.createElement("tr");
+
+    row.innerHTML = `
+      <td><input type="text" class="empName" /></td>
+      <td><input type="checkbox" class="addPayroll" /></td>
+      <td><input type="number" class="hoursDay" oninput="recalculate(this)" /></td>
+      <td><input type="number" class="daysWeek" oninput="recalculate(this)" /></td>
+      <td><input type="number" class="rateHour" oninput="recalculate(this)" /></td>
+      <td><input type="number" class="payDay" oninput="manualUpdate(this,'daily')" /></td>
+      <td><input type="number" class="payWeek" oninput="manualUpdate(this,'weekly')" /></td>
+      <td><input type="number" class="payMonth" oninput="manualUpdate(this,'monthly')" /></td>
+      <td><input type="number" class="payAnnual" readonly style="background:#f0f0f0;" /></td>
+      <td><input type="number" class="weeksYear" value="52" oninput="recalculate(this)" /></td>
+      <td>
+        <select class="overUnder">
+          <option value="Over">Over</option>
+          <option value="Under">Under</option>
+        </select>
+      </td>
+    `;
+    table.appendChild(row);
+  }
+
+  function recalculate(elem) {
+    const row = elem.closest("tr");
+    const hours = +row.querySelector(".hoursDay").value;
+    const days = +row.querySelector(".daysWeek").value;
+    const rate = +row.querySelector(".rateHour").value;
+    const weeks = +row.querySelector(".weeksYear").value || 52;
+
+    const daily = rate * hours;
+    const weekly = daily * days;
+    const monthly = weekly * 4.33;
+    const annual = weekly * weeks;
+
+    row.querySelector(".payDay").value = daily.toFixed(2);
+    row.querySelector(".payWeek").value = weekly.toFixed(2);
+    row.querySelector(".payMonth").value = monthly.toFixed(2);
+    row.querySelector(".payAnnual").value = annual.toFixed(2);
+
+    detectSCorpOwner(row, annual);
+  }
+
+  function manualUpdate(elem, source) {
+    const row = elem.closest("tr");
+    const val = +elem.value;
+    let weekly = 0;
+
+    switch(source) {
+      case 'daily':
+        weekly = val * (+row.querySelector(".daysWeek").value || 1);
+        break;
+      case 'weekly':
+        weekly = val;
+        break;
+      case 'monthly':
+        weekly = val / 4.33;
+        break;
+    }
+
+    const monthly = weekly * 4.33;
+    const annual = weekly * (+row.querySelector(".weeksYear").value || 52);
+
+    row.querySelector(".payWeek").value = weekly.toFixed(2);
+    row.querySelector(".payDay").value = (weekly / (+row.querySelector(".daysWeek").value || 1)).toFixed(2);
+    row.querySelector(".payMonth").value = monthly.toFixed(2);
+    row.querySelector(".payAnnual").value = annual.toFixed(2);
+
+    detectSCorpOwner(row, annual);
+  }
+
+  function detectSCorpOwner(row, annual) {
+    const w2Salary = +document.getElementById("w2Salary").value;
+    if (document.getElementById("businessType").value === "S-Corp" && annual === w2Salary && w2Salary !== 0) {
+      row.style.backgroundColor = "#e6f4ea";
+      row.setAttribute("data-owner", "true");
+    } else {
+      row.style.backgroundColor = "";
+      row.removeAttribute("data-owner");
+    }
+  }
+</script>
+<style>
+  #costBreakdown table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1rem;
+  }
+
+  #costBreakdown th,
+  #costBreakdown td {
+    padding: 10px 18px;
+    text-align: left;
+    border-bottom: 1px solid #ddd;
+  }
+
+  #costBreakdown th {
+    background-color: #f8f8f8;
+    font-weight: 600;
+  }
+
+  #costBreakdown h3 {
+    margin-top: 2rem;
+  }
+
+  #costBreakdown table tbody tr:hover {
+    background-color: #f9f9f9;
+  }
+
+  #costBreakdown .totals {
+    font-weight: bold;
+    background-color: #fcfcfc;
+  }
+</style>
+
+<div class="section" id="step3">
+  <h2>Step 3: Employer Cost Breakdown</h2>
+  <div class="tooltip">
+    💡 Employer payroll tax costs only apply to employees added to payroll. If you're an S-Corp, your W-2 salary is treated separately here for clarity.
+  </div>
+  <div id="costBreakdown"></div>
+</div>
+
+<script>
+  function currencyFormat(num) {
+    return "$" + Number(num).toLocaleString("en-US", { minimumFractionDigits: 2 });
+  }
+
+  function getRates() {
+    return {
+      li: +document.getElementById("liRate").value / 100,
+      esd: +document.getElementById("esdRate").value / 100,
+      fica: 0.0765
+    };
+  }
+
+  function analyzePayroll() {
+    const breakdown = document.getElementById("costBreakdown");
+    breakdown.innerHTML = "";
+    const rates = getRates();
+    const rows = document.querySelectorAll("#employeeBody tr");
+
+    let totalAnnualCost = 0;
+    let totalMonthlyCost = 0;
+
+    let staffTable = `
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Annual Pay</th>
+            <th>Monthly Pay</th>
+            <th>Annual Employer Taxes</th>
+            <th>Monthly Employer Taxes</th>
+            <th>Total Annual Cost</th>
+            <th>Total Monthly Cost</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+    let ownerCostHTML = "";
+
+    rows.forEach(row => {
+      const isChecked = row.querySelector(".addPayroll").checked;
+      if (!isChecked) return;
+
+      const name = row.querySelector(".empName").value || "Unnamed";
+      const annual = +row.querySelector(".payAnnual").value;
+      const monthly = annual / 12;
+      const isOwner = row.getAttribute("data-owner") === "true";
+
+      const annualTaxes = annual * (rates.li + rates.esd + rates.fica);
+      const monthlyTaxes = annualTaxes / 12;
+      const annualTotal = annual + annualTaxes;
+      const monthlyTotal = annualTotal / 12;
+
+      if (isOwner) {
+        ownerCostHTML = `
+          <h3>Employer Cost for S-Corp Owner (${name})</h3>
+          <table>
+            <thead><tr><th>Description</th><th>Amount</th></tr></thead>
+            <tbody>
+              <tr><td>Annual Salary</td><td>${currencyFormat(annual)}</td></tr>
+              <tr><td>Monthly Salary</td><td>${currencyFormat(monthly)}</td></tr>
+              <tr><td>Annual Employer Taxes</td><td>${currencyFormat(annualTaxes)}</td></tr>
+              <tr><td>Monthly Employer Taxes</td><td>${currencyFormat(monthlyTaxes)}</td></tr>
+              <tr><td><strong>Total Annual Employer Cost</strong></td><td><strong>${currencyFormat(annualTotal)}</strong></td></tr>
+              <tr><td><strong>Total Monthly Employer Cost</strong></td><td><strong>${currencyFormat(monthlyTotal)}</strong></td></tr>
+            </tbody>
+          </table>
+        `;
+      } else {
+        staffTable += `
+          <tr>
+            <td>${name}</td>
+            <td>${currencyFormat(annual)}</td>
+            <td>${currencyFormat(monthly)}</td>
+            <td>${currencyFormat(annualTaxes)}</td>
+            <td>${currencyFormat(monthlyTaxes)}</td>
+            <td>${currencyFormat(annualTotal)}</td>
+            <td>${currencyFormat(monthlyTotal)}</td>
+          </tr>
+        `;
+        totalAnnualCost += annualTotal;
+        totalMonthlyCost += monthlyTotal;
+      }
+    });
+
+    staffTable += `
+      <tr class="totals">
+        <td colspan="5">Total Staff Cost</td>
+        <td>${currencyFormat(totalAnnualCost)}</td>
+        <td>${currencyFormat(totalMonthlyCost)}</td>
+      </tr>
+    </tbody></table>`;
+
+    breakdown.innerHTML = staffTable + ownerCostHTML;
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    document.addEventListener("input", () => {
+      clearTimeout(window.analysisDebounce);
+      window.analysisDebounce = setTimeout(analyzePayroll, 500);
+    });
+    analyzePayroll();
+  });
+</script>
+<style>
+  #ownerSalaryTable table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1rem;
+  }
+
+  #ownerSalaryTable th,
+  #ownerSalaryTable td {
+    padding: 10px 18px;
+    text-align: left;
+    border-bottom: 1px solid #ddd;
+  }
+
+  #ownerSalaryTable th {
+    background-color: #f3f3f3;
+    font-weight: 600;
+  }
+
+  #ownerSalaryTable h3 {
+    margin-top: 2rem;
+  }
+
+  #ownerSalaryTable table tbody tr:hover {
+    background-color: #f9f9f9;
+  }
+</style>
+
+<div class="section" id="step3b">
+  <h2>Section 3B: S-Corp Owner W-2 Salary Calculation (WA State)</h2>
+  <div class="tooltip">
+    💡 For S-Corp owners, W-2 wages must reflect reasonable compensation. Washington employer payroll taxes apply just as they do for regular staff.
+  </div>
+  <div id="ownerSalaryTable"></div>
+</div>
+
+<script>
+  function renderOwnerSalaryTable() {
+    const output = document.getElementById("ownerSalaryTable");
+
+    // Get business salary and rates from Step 1
+    const businessType = document.getElementById("businessType")?.value;
+const ownerSalary = (businessType === "S-Corp")
+  ? +document.getElementById("w2Salary")?.value || 0
+  : 0;
+
+    const lniRate = +document.getElementById("liRate").value / 100;
+    const esdRate = +document.getElementById("esdRate").value / 100;
+    const ficaRate = 0.0765;
+
+    const monthlySalary = ownerSalary / 12;
+    const annualTaxes = ownerSalary * (lniRate + esdRate + ficaRate);
+    const monthlyTaxes = annualTaxes / 12;
+    const annualTotal = ownerSalary + annualTaxes;
+    const monthlyTotal = annualTotal / 12;
+
+    output.innerHTML = `
+      <table>
+        <thead>
+          <tr>
+            <th>Description</th>
+            <th>Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>W-2 Annual Salary (from Business Info)</td><td>${currencyFormat(ownerSalary)}</td></tr>
+          <tr><td>Monthly Salary</td><td>${currencyFormat(monthlySalary)}</td></tr>
+          <tr><td>Annual Employer Taxes</td><td>${currencyFormat(annualTaxes)}</td></tr>
+          <tr><td>Monthly Employer Taxes</td><td>${currencyFormat(monthlyTaxes)}</td></tr>
+          <tr><td><strong>Total Annual Employer Cost</strong></td><td><strong>${currencyFormat(annualTotal)}</strong></td></tr>
+          <tr><td><strong>Total Monthly Employer Cost</strong></td><td><strong>${currencyFormat(monthlyTotal)}</strong></td></tr>
+        </tbody>
+      </table>
+    `;
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    document.addEventListener("input", () => {
+      clearTimeout(window.ownerCalcDebounce);
+      window.ownerCalcDebounce = setTimeout(renderOwnerSalaryTable, 500);
+    });
+    renderOwnerSalaryTable();
+  });
+</script>
+<div class="bg-white p-6 rounded-lg shadow-md border border-gray-200 max-w-xl mx-auto">
+  <h2 class="text-2xl font-extrabold text-gray-900 mb-4">
+    📈 Carebear Books Will Reach Out with a Customized Analysis
+  </h2>
+
+  <p class="text-gray-800 mb-3 text-lg font-semibold">
+    We’ll compare your current payroll setup, estimate your tax risk,
+    and show you <strong>how much you could be saving</strong> — all tailored
+    to your specific business.
+  </p>
+
+  <p class="text-gray-800 mb-3 font-medium">
+    <strong>Paying under the table</strong> exposes you to:
+  </p>
+
+  <ul class="list-disc list-inside text-gray-800 mb-4 font-semibold">
+    <li><strong>IRS audits and penalties</strong></li>
+    <li><strong>Missed deductible wages and tax credits</strong></li>
+    <li><strong>Ineligible retirement and unemployment benefits</strong></li>
+    <li><strong>Disqualification from mortgages and loans</strong></li>
+    <li><strong>Reduced long-term financial security</strong></li>
+  </ul>
+
+  <p class="text-gray-800 mb-2 font-semibold">
+    ✅ Payroll protects your business, builds credibility, and unlocks future opportunities.
+  </p>
+
+  <p class="text-gray-800 mb-2 font-bold text-lg">
+    👉 Drop your <strong>email</strong> or <strong> Phone number</strong> below — Carebear Books will reach out with expert insights and your customized review.
+  </p>
+
+  <div class="flex gap-2">
+    <input
+      type="text"
+      placeholder="your@email.com or +1 (555) 123-4567"
+      class="flex-1 px-4 py-2 font-medium border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+    />
+    <button
+      class="px-4 py-2 bg-blue-600 text-white font-bold rounded-md hover:bg-blue-700"
+    >
+      Submit
+    </button>
+  </div>
+</div>
